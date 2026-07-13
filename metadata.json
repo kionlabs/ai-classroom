@@ -1,0 +1,6 @@
+{
+  "name": "KION Labs: 나만의 AI 비서",
+  "description": "초등학생들이 티처블 머신 모델을 연동하여 실시간 웹캠으로 전구를 켜거나 캐릭터를 움직여볼 수 있는 쉽고 재미있는 AI 비서 교육 웹앱입니다.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
