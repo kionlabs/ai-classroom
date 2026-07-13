@@ -1,3 +1,0 @@
-streamlit>=1.22.0
-streamlit-teachable-machine>=0.1.1
-pillow>=9.0.0
