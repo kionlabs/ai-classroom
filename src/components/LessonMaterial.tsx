@@ -20,7 +20,10 @@ import {
   Image as ImageIcon,
   Trash2,
   Info,
-  HelpCircle
+  HelpCircle,
+  Settings,
+  Folder,
+  RefreshCw
 } from 'lucide-react';
 
 // Pre-defined high-fidelity educational slides matching KION Labs curriculum
@@ -194,16 +197,80 @@ const DEFAULT_CURRICULUM_SLIDES = [
 export default function LessonMaterial() {
   const [slideIndex, setSlideIndex] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [viewerMode, setViewerMode] = useState<'interactive' | 'custom-images'>('interactive');
+  const [viewerMode, setViewerMode] = useState<'interactive' | 'local-slides' | 'custom-images'>('interactive');
   
   // Array to hold custom exported PPT slide images
   const [uploadedSlides, setUploadedSlides] = useState<{ name: string; url: string }[]>([]);
+  // Array to hold automatically scanned local slides in public/slides/
+  const [localSlides, setLocalSlides] = useState<{ name: string; url: string }[]>([]);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanPrefix, setScanPrefix] = useState<string>(''); // '' or 'slide' or 'page'
+  const [scanExt, setScanExt] = useState<string>('png'); // 'png' or 'jpg' or 'jpeg'
+  const [maxScanCount, setMaxScanCount] = useState<number>(20);
+  const [showConfig, setShowConfig] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const sliderContainerRef = useRef<HTMLDivElement | null>(null);
 
   const totalSlides = viewerMode === 'interactive' 
     ? DEFAULT_CURRICULUM_SLIDES.length 
+    : viewerMode === 'local-slides'
+    ? localSlides.length
     : uploadedSlides.length;
+
+  // Scan local slides
+  const scanLocalSlides = async (prefix: string, ext: string, maxCount: number) => {
+    setIsScanning(true);
+    const found: { name: string; url: string }[] = [];
+    
+    // Scan indices 1 to maxCount in parallel for maximum speed
+    const promises = Array.from({ length: maxCount }).map(async (_, idx) => {
+      const num = idx + 1;
+      const url = `/slides/${prefix}${num}.${ext}`;
+      try {
+        const res = await fetch(url, { method: 'HEAD' });
+        if (res.ok) {
+          const contentType = res.headers.get('content-type');
+          // Filter out HTML/text fallbacks (like custom 404 pages)
+          if (!contentType || !contentType.includes('text/html')) {
+            return {
+              name: `${prefix}${num}.${ext}`,
+              url: url,
+              index: num
+            };
+          }
+        }
+      } catch (e) {
+        // skip
+      }
+      return null;
+    });
+
+    const results = await Promise.all(promises);
+    const validSlides = results
+      .filter((item): item is { name: string; url: string; index: number } => item !== null)
+      .sort((a, b) => a.index - b.index)
+      .map(item => ({ name: item.name, url: item.url }));
+
+    setLocalSlides(validSlides);
+    setIsScanning(false);
+
+    if (validSlides.length > 0) {
+      setViewerMode('local-slides');
+      setSlideIndex(0);
+    } else {
+      // If active mode was local-slides but scan resulted in 0, go back to interactive
+      if (viewerMode === 'local-slides') {
+        setViewerMode('interactive');
+        setSlideIndex(0);
+      }
+    }
+  };
+
+  // Run initial scan on mount
+  useEffect(() => {
+    scanLocalSlides(scanPrefix, scanExt, maxScanCount);
+  }, []);
 
   // Sync state if browser native exit fullscreen is triggered (like Esc key)
   useEffect(() => {
@@ -291,24 +358,25 @@ export default function LessonMaterial() {
   return (
     <div className="space-y-6">
       {/* Introduction Banner Card */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
+      <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col xl:flex-row items-start xl:items-center justify-between gap-6 relative overflow-hidden">
         <div className="absolute -right-12 -bottom-12 w-48 h-48 bg-indigo-50/40 rounded-full blur-3xl pointer-events-none" />
         <div className="space-y-2 relative z-10">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold">
             <BookOpen className="w-3.5 h-3.5" />
             <span>KION Labs AI 커리큘럼</span>
           </div>
-          <h1 className="text-xl font-extrabold text-slate-800 tracking-tight">
+          <h1 className="text-xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
             인공지능 비서 학습 자료실 📚
           </h1>
           <p className="text-xs text-slate-500 leading-relaxed max-w-2xl">
             Teachable Machine 모델 빌드 방법, 에포크 및 머신러닝 동작 원리 이론 슬라이드입니다. 
-            아래의 정리용 프리젠테이션 슬라이드를 넘겨 보거나, <strong>내가 준비한 PPT 슬라이드 이미지 파일들</strong>을 업로드해 큰 화면으로 수업을 진행해 보세요!
+            아래 정리용 프리젠테이션 슬라이드를 넘겨 보거나, <strong>내장 이미지 폴더(public/slides/)</strong>의 이미지들을 불러오거나, <strong>개별 이미지 파일들</strong>을 업로드해 수업을 진행해 보세요!
           </p>
         </div>
 
         {/* Dynamic Presentation Switcher Controls */}
         <div className="flex flex-wrap items-center gap-2.5 relative z-10 shrink-0">
+          {/* 1. 기본 대화형 교안 */}
           <button
             id="btn-mode-interactive"
             onClick={() => {
@@ -325,6 +393,33 @@ export default function LessonMaterial() {
             <span>기본 교육용 슬라이드</span>
           </button>
 
+          {/* 2. 프로젝트 내장 이미지 슬라이더 (public/slides/) */}
+          <button
+            id="btn-mode-local-slides"
+            onClick={() => {
+              setViewerMode('local-slides');
+              setSlideIndex(0);
+            }}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all duration-200 cursor-pointer relative ${
+              viewerMode === 'local-slides'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-100'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            <Folder className="w-4 h-4" />
+            <span>내장 이미지 슬라이더</span>
+            {localSlides.length > 0 ? (
+              <span className="absolute -top-2 -right-2 px-1.5 py-0.5 text-[9px] bg-amber-500 text-white font-black rounded-full shadow-sm animate-bounce">
+                {localSlides.length}
+              </span>
+            ) : (
+              <span className="absolute -top-1.5 -right-1 px-1.5 py-0.5 text-[8px] bg-slate-400 text-white font-bold rounded-full">
+                0
+              </span>
+            )}
+          </button>
+
+          {/* 3. 로컬 파일 업로드 슬라이더 */}
           <div className="flex items-center gap-1.5">
             <button
               id="btn-upload-images-trigger"
@@ -336,7 +431,7 @@ export default function LessonMaterial() {
               }`}
             >
               <Upload className="w-4 h-4" />
-              <span>{uploadedSlides.length > 0 ? '수업 이미지 추가' : '수업 PPT 이미지 불러오기'}</span>
+              <span>{uploadedSlides.length > 0 ? '이미지 추가' : '수업 이미지 업로드'}</span>
             </button>
             <input
               ref={fileInputRef}
@@ -358,8 +453,110 @@ export default function LessonMaterial() {
               </button>
             )}
           </div>
+
+          {/* 내장 이미지 스캔 설정 기어 버튼 */}
+          <button
+            id="btn-toggle-config"
+            onClick={() => setShowConfig(!showConfig)}
+            className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+              showConfig 
+                ? 'bg-amber-100 border-amber-300 text-amber-800 ring-2 ring-amber-200' 
+                : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+            }`}
+            title="내장 교재 이미지 자동 스캔 설정"
+          >
+            <Settings className={`w-4 h-4 ${isScanning ? 'animate-spin text-amber-600' : ''}`} />
+          </button>
         </div>
       </div>
+
+      {/* 내장 교재 스캔 고급 제어판 (아코디언 형태) */}
+      <AnimatePresence>
+        {showConfig && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="bg-amber-50/50 border border-amber-200 rounded-3xl p-5 space-y-4 shadow-inner">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-black text-amber-900 flex items-center gap-1.5">
+                  <Settings className="w-4 h-4 text-amber-600" />
+                  <span>내장 교재 이미지 자동 감지(Auto Scanner) 설정</span>
+                </h4>
+                <div className="text-[10px] text-amber-700">
+                  * 정적 웹 환경에서 public/slides/ 경로 안의 파일 유무를 실시간으로 스캔합니다.
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">파일명 접두사 (Prefix)</label>
+                  <input
+                    type="text"
+                    value={scanPrefix}
+                    onChange={(e) => setScanPrefix(e.target.value)}
+                    placeholder="예: slide 또는 빈칸"
+                    className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">확장자 (Extension)</label>
+                  <select
+                    value={scanExt}
+                    onChange={(e) => setScanExt(e.target.value)}
+                    className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:border-amber-400"
+                  >
+                    <option value="png">PNG (.png)</option>
+                    <option value="jpg">JPG (.jpg)</option>
+                    <option value="jpeg">JPEG (.jpeg)</option>
+                    <option value="gif">GIF (.gif)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">최대 감지 한도 (Max Slides)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={maxScanCount}
+                    onChange={(e) => setMaxScanCount(Number(e.target.value))}
+                    className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    id="btn-run-manual-scan"
+                    disabled={isScanning}
+                    onClick={() => scanLocalSlides(scanPrefix, scanExt, maxScanCount)}
+                    className="w-full py-2 bg-amber-600 hover:bg-amber-700 disabled:bg-amber-400 text-white font-extrabold text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
+                    <span>{isScanning ? '스캔 중...' : '지금 다시 스캔하기'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 스캔 결과 상태창 */}
+              <div className="p-3 bg-white/80 rounded-xl border border-amber-100 flex items-center justify-between text-[11px] text-slate-600">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span>현재 스캔 상태:</span>
+                  <strong className="text-amber-900">
+                    {localSlides.length > 0 
+                      ? `/slides/ 폴더 내에 총 ${localSlides.length}개의 정적 이미지가 감지되어 사용할 수 있습니다.`
+                      : `/slides/ 경로에 이미지가 발견되지 않았습니다. 파일명 패턴을 확인해 보시거나, slides 폴더에 이미지를 복사해 주세요.`}
+                  </strong>
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  감지 예시 패턴: <code className="bg-slate-100 px-1 py-0.5 rounded text-amber-700">/slides/{scanPrefix || ''}1.{scanExt}</code>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Main Slide Presentation Arena Container */}
       <div 
@@ -378,11 +575,18 @@ export default function LessonMaterial() {
             <span className="text-xs font-extrabold text-slate-200">
               {viewerMode === 'interactive' 
                 ? '🏫 KION Labs AI School 공식 교안 슬라이드' 
+                : viewerMode === 'local-slides'
+                ? `📂 내장 이미지 교재 슬라이드 (${slideIndex + 1}/${localSlides.length}) - ${localSlides[slideIndex]?.name || ''}`
                 : `📂 수업 PPT 이미지 슬라이드 (${slideIndex + 1}/${uploadedSlides.length}) - ${uploadedSlides[slideIndex]?.name || ''}`}
             </span>
           </div>
 
           <div className="flex items-center gap-3">
+            {viewerMode === 'local-slides' && (
+              <span className="text-[10px] bg-emerald-900/50 text-emerald-200 border border-emerald-500/20 px-2.5 py-1 rounded-full font-bold">
+                내장 폴더 모드 (public/slides/)
+              </span>
+            )}
             {viewerMode === 'custom-images' && (
               <span className="text-[10px] bg-indigo-900/50 text-indigo-200 border border-indigo-500/20 px-2.5 py-1 rounded-full font-bold">
                 내 교재 모드
@@ -404,20 +608,37 @@ export default function LessonMaterial() {
           {totalSlides === 0 ? (
             <div className="text-center p-12 text-slate-400 space-y-4 max-w-md">
               <div className="w-16 h-16 bg-slate-900 border border-white/5 rounded-2xl flex items-center justify-center mx-auto text-3xl">
-                📥
+                {viewerMode === 'local-slides' ? '📂' : '📥'}
               </div>
-              <h3 className="font-extrabold text-slate-200 text-sm">업로드된 수업 이미지가 없습니다</h3>
+              <h3 className="font-extrabold text-slate-200 text-sm">
+                {viewerMode === 'local-slides' 
+                  ? '내장 폴더에 감지된 이미지가 없습니다' 
+                  : '업로드된 수업 이미지가 없습니다'}
+              </h3>
               <p className="text-xs text-slate-500 leading-relaxed">
-                파워포인트(PPT) 등에서 '다른 이름으로 저장' ➔ '이미지 파일(PNG/JPG)'로 전체 내보내기 하신 뒤, 여러 장의 슬라이드 이미지를 선택해 불러와 주세요!
+                {viewerMode === 'local-slides' 
+                  ? '프로젝트의 `/public/slides/` 폴더 내에 이미지 파일(예: 1.png, 2.png)을 넣어주세요. 우측 상단의 톱니바퀴(설정) 기어 버튼을 눌러 파일명 이름 규칙 및 확장자를 조절하여 다시 스캔할 수 있습니다.' 
+                  : "파워포인트(PPT) 등에서 '다른 이름으로 저장' ➔ '이미지 파일(PNG/JPG)'로 전체 내보내기 하신 뒤, 여러 장의 슬라이드 이미지를 선택해 불러와 주세요!"}
               </p>
-              <button
-                id="btn-upload-helper-trigger"
-                onClick={() => fileInputRef.current?.click()}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl transition-all shadow-md inline-flex items-center gap-1.5"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span>수업 이미지 불러오기</span>
-              </button>
+              {viewerMode === 'local-slides' ? (
+                <button
+                  id="btn-open-config-from-empty"
+                  onClick={() => setShowConfig(true)}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-extrabold text-xs rounded-xl transition-all shadow-md inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                  <span>스캔 설정 제어판 열기</span>
+                </button>
+              ) : (
+                <button
+                  id="btn-upload-helper-trigger"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl transition-all shadow-md inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>수업 이미지 불러오기</span>
+                </button>
+              )}
             </div>
           ) : (
             <div className="w-full h-full max-w-5xl aspect-video flex items-center justify-center relative">
@@ -494,6 +715,32 @@ export default function LessonMaterial() {
                           PAGE {(slideIndex + 1).toString().padStart(2, '0')}
                         </span>
                       </div>
+                    </motion.div>
+                  ) : viewerMode === 'local-slides' ? (
+                    // Local slide image render stage
+                    <motion.div
+                      key={`local-${slideIndex}`}
+                      initial={{ opacity: 0, scale: 0.98 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.25 }}
+                      className="w-full h-full bg-slate-950 flex items-center justify-center relative group"
+                    >
+                      {localSlides[slideIndex] ? (
+                        <>
+                          <img
+                            src={localSlides[slideIndex].url}
+                            alt={`Local Slide ${slideIndex + 1}`}
+                            referrerPolicy="no-referrer"
+                            className="max-w-full max-h-full object-contain pointer-events-none"
+                          />
+                          <div className="absolute bottom-4 left-4 bg-black/75 px-3 py-1.5 rounded-xl border border-white/10 text-[10px] text-slate-300 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                            서버 내장 파일명: {localSlides[slideIndex].name}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-slate-400 text-xs">이미지를 불러오는 중입니다...</div>
+                      )}
                     </motion.div>
                   ) : (
                     // PPT exported slide image render stage
@@ -588,15 +835,15 @@ export default function LessonMaterial() {
         </div>
       </div>
 
-      {/* Slide Thumbnail Preview Gallery (Only shown if uploaded images exist) */}
-      {viewerMode === 'custom-images' && uploadedSlides.length > 0 && (
+      {/* Slide Thumbnail Preview Gallery (Only shown if local slides or uploaded images exist) */}
+      {((viewerMode === 'local-slides' && localSlides.length > 0) || (viewerMode === 'custom-images' && uploadedSlides.length > 0)) && (
         <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm space-y-3">
           <h4 className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
             <ImageIcon className="w-4 h-4 text-indigo-600" />
-            <span>수업 슬라이드 미리보기 ({uploadedSlides.length}개 업로드됨)</span>
+            <span>수업 슬라이드 미리보기 ({viewerMode === 'local-slides' ? localSlides.length : uploadedSlides.length}개 감지됨)</span>
           </h4>
           <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-200">
-            {uploadedSlides.map((slide, idx) => (
+            {(viewerMode === 'local-slides' ? localSlides : uploadedSlides).map((slide, idx) => (
               <button
                 key={idx}
                 onClick={() => setSlideIndex(idx)}
