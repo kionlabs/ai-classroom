@@ -594,6 +594,17 @@ export default function RockPaperScissors() {
                     <RefreshCw className={`w-3.5 h-3.5 ${isModelLoading ? 'animate-spin' : ''}`} />
                   </button>
                 </div>
+                {/* Quick Start Preset button */}
+                <div className="pt-0.5">
+                  <button
+                    id="btn-rps-quick-preset"
+                    type="button"
+                    onClick={() => setModelUrl('https://teachablemachine.withgoogle.com/models/T9MflCJYi/')}
+                    className="w-full py-1.5 px-3 bg-rose-50 hover:bg-rose-100 border border-rose-200/50 rounded-xl text-[10px] font-extrabold text-rose-700 transition cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <span>✋ 예시 가위바위보 대전 모델 연결 (자동 로딩) ⚡️</span>
+                  </button>
+                </div>
                 {modelError && <p className="text-[10px] font-bold text-rose-500 mt-1">⚠️ {modelError}</p>}
                 {!isModelLoaded && !modelError && !isModelLoading && (
                   <p className="text-[10px] text-slate-400 leading-normal mt-1">

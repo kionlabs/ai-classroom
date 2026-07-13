@@ -69,10 +69,14 @@ export default function ModelInput({
     // Standard public preset Teachable Machine model URL for Palm vs Fist (or similar test)
     // We can provide a working preset link so kids can try it instantly!
     const presetUrl = 'https://teachablemachine.withgoogle.com/models/pNVRszudQ/';
-    setInputValue(presetUrl);
+    handleLoadModel(presetUrl);
+  };
+
+  const handleLoadModel = (url: string) => {
+    setInputValue(url);
     setErrorMsg(null);
     setIsValid(true);
-    onChangeModelUrl(presetUrl);
+    onChangeModelUrl(url);
     onChangeAppMode('real');
   };
 
@@ -158,6 +162,40 @@ export default function ModelInput({
                 }`}
               />
               <Link2 className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+            </div>
+          </div>
+
+          {/* Quick Start Models Section */}
+          <div className="space-y-3 bg-slate-50/60 p-4 rounded-2xl border border-slate-100/50">
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-indigo-500" />
+              <span className="text-xs font-black text-slate-700">퀵 스타트 모델 (원클릭 자동 연결 ⚡️)</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                id="btn-quick-model-pose"
+                type="button"
+                onClick={() => handleLoadModel('https://teachablemachine.withgoogle.com/models/pNVRszudQ/')}
+                className="group flex items-center gap-3 p-3 bg-indigo-50/70 hover:bg-indigo-100/80 border border-indigo-100/40 rounded-xl transition-all duration-200 text-left cursor-pointer"
+              >
+                <span className="text-2xl bg-white p-2 rounded-lg shadow-sm group-hover:scale-110 transition-transform duration-200 shrink-0">🙆</span>
+                <div className="space-y-0.5">
+                  <div className="text-xs font-black text-indigo-950">만세/T자 모델 (체험)</div>
+                  <div className="text-[10px] text-indigo-600 font-semibold leading-relaxed">동작인식 스마트 조명 & 캐릭터 달리기</div>
+                </div>
+              </button>
+              <button
+                id="btn-quick-model-rps"
+                type="button"
+                onClick={() => handleLoadModel('https://teachablemachine.withgoogle.com/models/T9MflCJYi/')}
+                className="group flex items-center gap-3 p-3 bg-rose-50/60 hover:bg-rose-100/80 border border-rose-100/30 rounded-xl transition-all duration-200 text-left cursor-pointer"
+              >
+                <span className="text-2xl bg-white p-2 rounded-lg shadow-sm group-hover:scale-110 transition-transform duration-200 shrink-0">✋</span>
+                <div className="space-y-0.5">
+                  <div className="text-xs font-black text-rose-950">가위바위보 모델 (대전)</div>
+                  <div className="text-[10px] text-rose-600 font-semibold leading-relaxed">실시간 가위, 바위, 보 대전실 모델</div>
+                </div>
+              </button>
             </div>
           </div>
 
