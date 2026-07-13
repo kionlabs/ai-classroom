@@ -204,9 +204,9 @@ export default function LessonMaterial() {
   // Array to hold automatically scanned local slides in public/slides/
   const [localSlides, setLocalSlides] = useState<{ name: string; url: string }[]>([]);
   const [isScanning, setIsScanning] = useState(false);
-  const [scanPrefix, setScanPrefix] = useState<string>(''); // '' or 'slide' or 'page'
-  const [scanExt, setScanExt] = useState<string>('png'); // 'png' or 'jpg' or 'jpeg'
-  const [maxScanCount, setMaxScanCount] = useState<number>(20);
+  const [scanPrefix, setScanPrefix] = useState<string>('slide'); // '' or 'slide' or 'page'
+  const [scanExt, setScanExt] = useState<string>('jpg'); // 'png' or 'jpg' or 'jpeg'
+  const [maxScanCount, setMaxScanCount] = useState<number>(30);
   const [showConfig, setShowConfig] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -221,27 +221,35 @@ export default function LessonMaterial() {
   // Scan local slides
   const scanLocalSlides = async (prefix: string, ext: string, maxCount: number) => {
     setIsScanning(true);
-    const found: { name: string; url: string }[] = [];
     
     // Scan indices 1 to maxCount in parallel for maximum speed
     const promises = Array.from({ length: maxCount }).map(async (_, idx) => {
       const num = idx + 1;
-      const url = `/slides/${prefix}${num}.${ext}`;
-      try {
-        const res = await fetch(url, { method: 'HEAD' });
-        if (res.ok) {
-          const contentType = res.headers.get('content-type');
-          // Filter out HTML/text fallbacks (like custom 404 pages)
-          if (!contentType || !contentType.includes('text/html')) {
-            return {
-              name: `${prefix}${num}.${ext}`,
-              url: url,
-              index: num
-            };
+      
+      // Determine file name patterns to try:
+      // If single digit (e.g., 1-9), we check both padded ("slide01.jpg") and non-padded ("slide1.jpg") patterns
+      const possibleNames = num < 10
+        ? [`${prefix}0${num}.${ext}`, `${prefix}${num}.${ext}`]
+        : [`${prefix}${num}.${ext}`];
+
+      for (const fileName of possibleNames) {
+        const url = `/slides/${fileName}`;
+        try {
+          const res = await fetch(url, { method: 'HEAD' });
+          if (res.ok) {
+            const contentType = res.headers.get('content-type');
+            // Filter out HTML/text fallbacks (like custom 404 pages)
+            if (!contentType || !contentType.includes('text/html')) {
+              return {
+                name: fileName,
+                url: url,
+                index: num
+              };
+            }
           }
+        } catch (e) {
+          // skip and try next option
         }
-      } catch (e) {
-        // skip
       }
       return null;
     });
